@@ -8,6 +8,7 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   html, body { margin: 0; padding: 0; }
   #root { min-height: 100vh; }
@@ -17,7 +18,24 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useMemo, useRef } = React;
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ---------- Google Sheets live data source ---------- */
+const SHEET_ID = "1si1YckuF4yrNeY6ofx-zsBy2FkRPwUzt";
+const REKAP_SHEET_NAME = "Rekap Barang";
+const TAGIHAN_SHEET_NAME = "Tagihan";
+
+function sheetCsvUrl(sheetName) {
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+}
+
+async function fetchSheetRows(sheetName) {
+  const res = await fetch(sheetCsvUrl(sheetName));
+  if (!res.ok) throw new Error(`Gagal mengambil sheet "${sheetName}" (status ${res.status})`);
+  const csvText = await res.text();
+  const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+  return parsed.data;
+}
 
 /* ---------- small inline icons (no external icon library needed) ---------- */
 const Icon = ({ path, size = 16 }) => (
@@ -53,32 +71,248 @@ const SEED_REKAP = [
   { id: "r6", batch: 11, asal: "JP", nama: "Erlangga Putri", item: "Photobook Nogizaka46", jumlah: 1, status: "Sampai di Rumah Admin" },
 ];
 
-const SEED_TAGIHAN = [
-  { id: "g1", nama: "Aya Nurul", batch: "12 KR", items: [
-      { id: "i1", item: "PC NewJeans Danielle - Ditto", tagihan: 150000 },
-      { id: "i2", item: "PC IVE Wonyoung - I've Mine", tagihan: 135000 },
-    ], total: 285000, lunas: false },
-  { id: "g2", nama: "Bunga Sari", batch: "12 KR", items: [
-      { id: "i3", item: "Album LE SSERAFIM EASY", tagihan: 95000 },
-    ], total: 95000, lunas: false },
-  { id: "g3", nama: "Dewi Anjani", batch: "11 CN", items: [
-      { id: "i4", item: "Lightstick TWS ver.2", tagihan: 210000 },
-    ], total: 210000, lunas: true },
-  { id: "g4", nama: "Erlangga Putri", batch: "11 JP", items: [
-      { id: "i5", item: "Photobook Nogizaka46", tagihan: 175000 },
-    ], total: 175000, lunas: true },
+const SEED_TAGIHAN_RAW = [
+  { Nama: "04kives", Batch: "511 KR", Barang: "LS Set Box Biru (No PC Set & USB)", Tagihan: 125000.0, Lunas: "Tidak" },
+  { Nama: "04kives", Batch: "511 KR", Barang: "Freebies (350 gram)", Tagihan: 77000.0, Lunas: "Tidak" },
+  { Nama: "abiel", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "abiel", Batch: "529 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "abiel", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "abiel", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "acha", Batch: "540 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Achel", Batch: "513 KR", Barang: "Magnet Hearts Bracelet Set", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "Achel", Batch: "524 KR", Barang: "1 LS Set Box Biru", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "Achel", Batch: "288 JP", Barang: "Impick Jaehyun", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "Achel", Batch: "288 JP", Barang: "Impick Sungho", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "adelia", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "adelia", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "adelia", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Aden", Batch: "520 KR", Barang: "1 LS TWS", Tagihan: 70000.0, Lunas: "Tidak" },
+  { Nama: "adin", Batch: "288 JP", Barang: "Impick Sungho", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "adin", Batch: "288 JP", Barang: "Impick Taesan", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "ading", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "afifa v", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "afifa v", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "afifa v", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "afifa v", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "aii", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "aii", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Al Cee", Batch: "523 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "aleeya", Batch: "523 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "annisa", Batch: "540 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "annisa", Batch: "288 JP", Barang: "Impick Taesan", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "AnnLix", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "AnnLix", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "aputs", Batch: "513 KR", Barang: "Laptop Pouch Peach Size M with sticker", Tagihan: 75000.0, Lunas: "Tidak" },
+  { Nama: "Astrid", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Astrid", Batch: "288 JP", Barang: "PC Holder", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "Astrid", Batch: "288 JP", Barang: "Puppet Dalring", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Astrid", Batch: "288 JP", Barang: "Puppet Myngmyng", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Astrid", Batch: "288 JP", Barang: "Mini Impick (2)", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "atha", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Aurel", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Aurel", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "ayya", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "ayya", Batch: "535 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "ayya", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "azila", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "azka :3", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "bie", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "bie", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "bie", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "bilahh", Batch: "288 JP", Barang: "Puppet 312", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "bilahh", Batch: "288 JP", Barang: "Puppet Myngmyng", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Byu", Batch: "512 KR", Barang: "Planet Necklace", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "Byu", Batch: "514 KR", Barang: "Jelly Necklace Melon", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "Byu", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Candra", Batch: "515 KR", Barang: "1 Membership Card Onedoor 3rd Kit", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "catharina anya", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "cikaall", Batch: "288 JP", Barang: "Impick Leehan", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "denia", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "devn", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "devn", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "devn", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Dhea N", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "diana", Batch: "522 KR", Barang: "Strap Lightstick BBNEXDO", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "diana", Batch: "522 KR", Barang: "Freebies Keyring", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "diana", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "dila", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "dila r", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "dila r", Batch: "529 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Eibi", Batch: "528 KR", Barang: "1 Plush Keyring Han Tatpung V2", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "Eibi", Batch: "528 KR", Barang: "Freebies", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Eibi", Batch: "531 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Eibi", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "esh/Aeesha Zahra", Batch: "531 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "512 KR", Barang: "Magnet Heart Couple Necklace", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "512 KR", Barang: "Laptop Pouch Hologram Peach S with sticker", Tagihan: 45000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "523 KR", Barang: "4 pc", Tagihan: 28000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "535 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "540 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "fa", Batch: "284 JP", Barang: "1 Postcard", Tagihan: 8000.0, Lunas: "Tidak" },
+  { Nama: "Fani", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Fani", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "284 JP", Barang: "1 Postcard", Tagihan: 8000.0, Lunas: "Tidak" },
+  { Nama: "faraaa", Batch: "284 JP", Barang: "1 Long Postcard", Tagihan: 8000.0, Lunas: "Tidak" },
+  { Nama: "farsa", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "farsa", Batch: "519 KR", Barang: "4 pc", Tagihan: 28000.0, Lunas: "Tidak" },
+  { Nama: "farsa", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "farsa", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "farsa", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Fern_", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Fern_", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Fern_", Batch: "287 JP", Barang: "1 Album Sweet Home Leehan Set", Tagihan: 45000.0, Lunas: "Tidak" },
+  { Nama: "fina", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "fina", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Firlita", Batch: "288 JP", Barang: "Puppet Catbbi", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "fizi", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "fluttershy", Batch: "519 KR", Barang: "5 pc", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "gabbie", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "gabbie", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "gabbie", Batch: "537 KR", Barang: "4 pc", Tagihan: 28000.0, Lunas: "Tidak" },
+  { Nama: "gege", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "gege", Batch: "529 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "gege!!", Batch: "527 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "halfa", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "ikabanggg", Batch: "525 KR", Barang: "1 Tumbler Ediya BBNEXDO", Tagihan: 120000.0, Lunas: "Tidak" },
+  { Nama: "ikabanggg", Batch: "525 KR", Barang: "Freebies (100 gram)", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "iLen", Batch: "512 KR", Barang: "Cupid Arrow Bracelet", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "Inta", Batch: "288 JP", Barang: "Puppet Tatpung", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Inta", Batch: "288 JP", Barang: "Puppet Catbbi", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Jasmine", Batch: "523 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "jessica", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "jieLo(ve)", Batch: "529 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "jira", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Juli_", Batch: "540 KR", Barang: "1 Album Frame ver Jaehyun set", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "kel", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "kel", Batch: "531 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "kel", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "kesi", Batch: "288 JP", Barang: "Puppet Tatpung", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "kiaa", Batch: "540 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "kiaa", Batch: "540 KR", Barang: "1 Album Clink ver Set", Tagihan: 25000.0, Lunas: "Tidak" },
+  { Nama: "Kira", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "kk yg itu", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "lin", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "lin", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "lin", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "lin", Batch: "288 JP", Barang: "Puppet 312", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "lin", Batch: "288 JP", Barang: "Puppet Woonbaby", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Livvy", Batch: "535 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Lya", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "manda", Batch: "535 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "may bintang", Batch: "288 JP", Barang: "Impick Taesan", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "may rumah", Batch: "288 JP", Barang: "Denim Totebag", Tagihan: 210000.0, Lunas: "Tidak" },
+  { Nama: "may rumah", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "may rumah", Batch: "291 JP", Barang: "Harga Bersih JP", Tagihan: 8000.0, Lunas: "Tidak" },
+  { Nama: "Mega NF", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Mega NF", Batch: "288 JP", Barang: "T-Shirt White (M)", Tagihan: 70000.0, Lunas: "Tidak" },
+  { Nama: "Mega NF", Batch: "288 JP", Barang: "Sisa harga T-shirt", Tagihan: 58000.0, Lunas: "Tidak" },
+  { Nama: "mell", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "mell", Batch: "535 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "mell", Batch: "288 JP", Barang: "Impick Jaehyun", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "mulnyangz", Batch: "518 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "mulnyangz", Batch: "527 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "mulnyangz", Batch: "535 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Na.", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Na.", Batch: "523 KR", Barang: "3 pc", Tagihan: 21000.0, Lunas: "Tidak" },
+  { Nama: "Na.", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Na.", Batch: "537 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "nadiy", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "nadiy", Batch: "518 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "nadiy", Batch: "519 KR", Barang: "5 pc", Tagihan: 35000.0, Lunas: "Tidak" },
+  { Nama: "nadiy", Batch: "527 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "nadiy", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "nas", Batch: "516 KR", Barang: "1 LS Cover Myngmyng No Pouch", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "nas", Batch: "516 KR", Barang: "Freebies (75 gr)", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "nas", Batch: "284 JP", Barang: "2 Postcard", Tagihan: 16000.0, Lunas: "Tidak" },
+  { Nama: "nas", Batch: "285 JP", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Nata", Batch: "519 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Nata", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "novihermawan", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "novihermawan", Batch: "523 KR", Barang: "7 pc", Tagihan: 49000.0, Lunas: "Tidak" },
+  { Nama: "novihermawan", Batch: "526 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "novihermawan", Batch: "284 JP", Barang: "2 Postcard", Tagihan: 16000.0, Lunas: "Tidak" },
+  { Nama: "novihermawan", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "nu", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "nu", Batch: "522 KR", Barang: "Lightstick Keyring Sealed V1", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "nu", Batch: "522 KR", Barang: "Freebies Keyring", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "nu", Batch: "523 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "nu", Batch: "288 JP", Barang: "Puppet Tatpung", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Nun", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "paw", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "paw", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "paw", Batch: "288 JP", Barang: "Puppet 312", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "519 KR", Barang: "4 pc", Tagihan: 28000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "526 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "529 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "533 KR", Barang: "4 pc", Tagihan: 28000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "535 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "537 KR", Barang: "3 pc", Tagihan: 21000.0, Lunas: "Tidak" },
+  { Nama: "renn", Batch: "539 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Rere<3", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "resty", Batch: "543 KR", Barang: "1 LS Set Box Biru (No PC Set)", Tagihan: 125000.0, Lunas: "Tidak" },
+  { Nama: "rifkakk", Batch: "517 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "risa", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Ru", Batch: "518 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "rucita", Batch: "515 KR", Barang: "1 Membership Card Onedoor 3rd Kit", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "rucita", Batch: "523 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "rucita", Batch: "529 KR", Barang: "3 pc", Tagihan: 21000.0, Lunas: "Tidak" },
+  { Nama: "sarah", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "sasaa", Batch: "531 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "512 KR", Barang: "Cupid Arrow Bracelet", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "289 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "seorin", Batch: "292 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Siti Aisyah", Batch: "288 JP", Barang: "Puppet Catbbi", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "Siti Aisyah", Batch: "291 JP", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "skeolll", Batch: "512 KR", Barang: "Emerald Necklace", Tagihan: 20000.0, Lunas: "Tidak" },
+  { Nama: "sta", Batch: "288 JP", Barang: "Denim Totebag", Tagihan: 210000.0, Lunas: "Tidak" },
+  { Nama: "Stefani A", Batch: "523 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "sza", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Tam", Batch: "512 KR", Barang: "Laptop Pouch Milk M with sticker", Tagihan: 75000.0, Lunas: "Tidak" },
+  { Nama: "Tam", Batch: "531 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "Tania C", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Tania C", Batch: "537 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "tasha", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "tasha", Batch: "539 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "tasha", Batch: "540 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "tela", Batch: "517 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "Tir", Batch: "288 JP", Barang: "Puppet Woonbaby", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "ureonni", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "ureonni", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "uti", Batch: "518 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "uti", Batch: "527 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "vall", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "vanrico", Batch: "530 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "vanrico", Batch: "533 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "vanrico", Batch: "288 JP", Barang: "Puppet Woonbaby", Tagihan: 15000.0, Lunas: "Tidak" },
+  { Nama: "vau", Batch: "529 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "vau", Batch: "537 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "viyy", Batch: "537 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "yeti", Batch: "518 KR", Barang: "3 pc", Tagihan: 21000.0, Lunas: "Tidak" },
+  { Nama: "yeti", Batch: "529 KR", Barang: "1 pc", Tagihan: 7000.0, Lunas: "Tidak" },
+  { Nama: "yeti", Batch: "530 KR", Barang: "2 pc", Tagihan: 14000.0, Lunas: "Tidak" },
+  { Nama: "YoY", Batch: "519 KR", Barang: "5 pc", Tagihan: 35000.0, Lunas: "Tidak" },
 ];
 
 function groupTagihanRows(rows) {
   const map = new Map();
   rows.forEach((r, i) => {
-    const key = `${r.Nama}||${r.Batch}`;
+    const key = String(r.Nama);
     if (!map.has(key)) {
-      map.set(key, { id: `t-${Date.now()}-${i}`, nama: String(r.Nama), batch: String(r.Batch), items: [], total: 0, lunas: true });
+      map.set(key, { id: `t-${Date.now()}-${i}`, nama: String(r.Nama), items: [], total: 0, lunas: true });
     }
     const g = map.get(key);
     const nilai = Number(r.Tagihan) || 0;
-    g.items.push({ id: `ti-${Date.now()}-${i}`, item: String(r.Barang), tagihan: nilai });
+    g.items.push({ id: `ti-${Date.now()}-${i}`, batch: String(r.Batch), item: String(r.Barang), tagihan: nilai });
     g.total += nilai;
     if (String(r.Lunas).toLowerCase() !== "ya") g.lunas = false;
   });
@@ -150,9 +384,46 @@ function UploadCard({ title, hint, templateHeaders, templateExample, fileName, o
 
 function GoTracker() {
   const [rekap, setRekap] = useState(SEED_REKAP);
-  const [tagihan, setTagihan] = useState(SEED_TAGIHAN);
+  const [tagihan, setTagihan] = useState(() => groupTagihanRows(SEED_TAGIHAN_RAW));
   const saveRekap = setRekap;
   const saveTagihan = setTagihan;
+
+  const [syncStatus, setSyncStatus] = useState("loading"); // loading | live | error
+  const [syncError, setSyncError] = useState("");
+  const [lastSynced, setLastSynced] = useState(null);
+
+  function mapRekapRow(r, i) {
+    return {
+      id: `r-${i}-${r.Nama}-${r.Item}`,
+      batch: Number(r.Batch),
+      asal: String(r.Asal || "").toUpperCase(),
+      nama: String(r.Nama || ""),
+      item: String(r.Item || ""),
+      jumlah: Number(r.Jumlah) || 1,
+      status: STATUS_STEPS.includes(r.Status) ? r.Status : "Checkout",
+    };
+  }
+
+  const syncFromSheets = async () => {
+    setSyncStatus("loading");
+    setSyncError("");
+    try {
+      const [rekapRows, tagihanRows] = await Promise.all([
+        fetchSheetRows(REKAP_SHEET_NAME),
+        fetchSheetRows(TAGIHAN_SHEET_NAME),
+      ]);
+      if (rekapRows.length > 0) saveRekap(rekapRows.map(mapRekapRow));
+      if (tagihanRows.length > 0) saveTagihan(groupTagihanRows(tagihanRows));
+      setSyncStatus("live");
+      setLastSynced(new Date());
+    } catch (err) {
+      console.error(err);
+      setSyncStatus("error");
+      setSyncError("Belum berhasil konek ke Google Sheets — menampilkan data contoh terakhir.");
+    }
+  };
+
+  useEffect(() => { syncFromSheets(); }, []);
 
   const [role, setRole] = useState("publik");
   const [tab, setTab] = useState("rekap");
@@ -183,11 +454,16 @@ function GoTracker() {
   }, [filteredRekap]);
 
   const filteredTagihan = useMemo(() => {
-    return tagihan.filter((t) => {
-      if (query && !t.nama.toLowerCase().includes(query.toLowerCase())) return false;
-      if (batchFilter !== "Semua" && !String(t.batch).includes(String(batchFilter))) return false;
-      return true;
-    });
+    return tagihan
+      .filter((t) => {
+        if (query && !t.nama.toLowerCase().includes(query.toLowerCase())) return false;
+        if (batchFilter !== "Semua" && !t.items.some((it) => String(it.batch).includes(String(batchFilter)))) return false;
+        return true;
+      })
+      .map((t) => ({
+        ...t,
+        items: batchFilter === "Semua" ? t.items : t.items.filter((it) => String(it.batch).includes(String(batchFilter))),
+      }));
   }, [tagihan, query, batchFilter]);
 
   return (
@@ -205,13 +481,19 @@ function GoTracker() {
           <button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>Tampilan Admin</button>
         </div>
       </div>
-      <div className="demo-note">Demo — di versi live, data ini tersambung ke Google Sheets yang kamu kelola.</div>
+      <div className={`sync-note ${syncStatus}`}>
+        {syncStatus === "loading" && "Memuat data terbaru dari Google Sheets…"}
+        {syncStatus === "live" && lastSynced && `Data live dari Google Sheets · diperbarui ${lastSynced.toLocaleTimeString("id-ID")}`}
+        {syncStatus === "error" && syncError}
+        <button className="sync-refresh" onClick={syncFromSheets}>⟳ Refresh</button>
+      </div>
 
       <div className="content">
         {role === "admin" ? (
           <>
             <div className="admin-intro">
-              Upload file Excel di bawah untuk memperbarui data. Setelah berhasil, tampilan publik langsung ikut berubah — tidak perlu langkah tambahan.
+              Data situs ini sekarang otomatis dari Google Sheets kamu — admin cukup edit Sheets seperti biasa, tidak perlu upload apa pun di sini.
+              Fitur upload di bawah ini hanya untuk pratinjau cepat di browser kamu sendiri (tidak mengubah data Sheets, dan hilang saat halaman di-refresh).
             </div>
             <div className="admin-grid">
               <UploadCard
@@ -245,7 +527,7 @@ function GoTracker() {
               />
             </div>
             <div className="reset-row">
-              <button onClick={() => { saveRekap(SEED_REKAP); saveTagihan(SEED_TAGIHAN); }}>
+              <button onClick={() => { saveRekap(SEED_REKAP); saveTagihan(groupTagihanRows(SEED_TAGIHAN_RAW)); }}>
                 <ResetIcon size={12} /> Reset ke data contoh
               </button>
             </div>
@@ -336,7 +618,7 @@ function GoTracker() {
                         g.items.map((item, idx) => (
                           <tr key={item.id}>
                             {idx === 0 && <td className="td-nama" rowSpan={g.items.length}>{g.nama}</td>}
-                            {idx === 0 && <td className="td-center" rowSpan={g.items.length}>{g.batch}</td>}
+                            <td className="td-center">{item.batch}</td>
                             <td>{item.item}</td>
                             <td className="td-right">{currency(item.tagihan)}</td>
                             {idx === 0 && <td className="td-right td-total" rowSpan={g.items.length}>{currency(g.total)}</td>}
@@ -405,9 +687,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(<GoTracker />);
   }
   .role-toggle button.active { background: var(--ink); color: #fff; }
 
-  .demo-note {
-    font-size: 11.5px; color: var(--muted); text-align: center; padding: 7px;
+  .sync-note {
+    font-size: 11.5px; color: var(--muted); text-align: center; padding: 7px 10px;
     background: #E4E8E4; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  }
+  .sync-note.error { background: #FBE5E1; color: #8A2E20; }
+  .sync-note.live { background: #E1EDE5; color: #24593A; }
+  .sync-refresh {
+    font-size: 11px; font-weight: 700; border: 1px solid currentColor; background: transparent; color: inherit;
+    border-radius: 20px; padding: 2px 10px; cursor: pointer; font-family: inherit;
   }
 
   .content { max-width: 880px; margin: 0 auto; padding: 22px 18px 60px; }
