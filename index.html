@@ -303,6 +303,12 @@ const SEED_TAGIHAN_RAW = [
   { Nama: "YoY", Batch: "519 KR", Barang: "5 pc", Tagihan: 35000.0, Lunas: "Tidak" },
 ];
 
+function parseRupiah(val) {
+  if (val === null || val === undefined) return 0;
+  const cleaned = String(val).replace(/[^0-9]/g, "");
+  return cleaned ? parseInt(cleaned, 10) : 0;
+}
+
 function groupTagihanRows(rows) {
   const map = new Map();
   rows.forEach((r, i) => {
@@ -311,7 +317,7 @@ function groupTagihanRows(rows) {
       map.set(key, { id: `t-${Date.now()}-${i}`, nama: String(r.Nama), items: [], total: 0, lunas: true });
     }
     const g = map.get(key);
-    const nilai = Number(r.Tagihan) || 0;
+    const nilai = parseRupiah(r.Tagihan);
     g.items.push({ id: `ti-${Date.now()}-${i}`, batch: String(r.Batch), item: String(r.Barang), tagihan: nilai });
     g.total += nilai;
     if (String(r.Lunas).toLowerCase() !== "ya") g.lunas = false;
@@ -395,11 +401,11 @@ function GoTracker() {
   function mapRekapRow(r, i) {
     return {
       id: `r-${i}-${r.Nama}-${r.Item}`,
-      batch: Number(r.Batch),
+      batch: parseRupiah(r.Batch),
       asal: String(r.Asal || "").toUpperCase(),
       nama: String(r.Nama || ""),
       item: String(r.Item || ""),
-      jumlah: Number(r.Jumlah) || 1,
+      jumlah: parseRupiah(r.Jumlah) || 1,
       status: STATUS_STEPS.includes(r.Status) ? r.Status : "Checkout",
     };
   }
