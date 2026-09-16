@@ -44,6 +44,10 @@ const Icon = ({ path, size = 16 }) => (
 );
 const SearchIcon = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>} />;
 const PlaneIcon = (p) => <Icon {...p} path={<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></>} />;
+const MenuIcon = (p) => <Icon {...p} path={<><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" /></>} />;
+const BoxIcon = (p) => <Icon {...p} path={<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>} />;
+const ReceiptIcon = (p) => <Icon {...p} path={<><path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z" /><path d="M9 8h6M9 12h6" /></>} />;
+const RefreshIcon = (p) => <Icon {...p} path={<><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></>} />;
 
 /* ---------- data ---------- */
 const ALL_STATUSES = ["DONE CO", "OTW WH", "WH KR", "WH JP", "WH CH", "OTW INA", "WH INA", "ARRIVED ADMIN", "CANCEL", "REFUND"];
@@ -383,6 +387,7 @@ function GoTracker() {
 
   useEffect(() => { syncFromSheets(); }, []);
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tab, setTab] = useState("rekap");
 
   const [rekapQuery, setRekapQuery] = useState("");
@@ -398,6 +403,25 @@ function GoTracker() {
 
   const [tagihanQuery, setTagihanQuery] = useState("");
   const [tagihanBatchFilter, setTagihanBatchFilter] = useState("Semua");
+
+  const stats = useMemo(() => {
+    const batchSet = new Set(rekap.map((r) => `${r.asal}||${r.batch}`));
+    const buyerSet = new Set(rekap.map((r) => r.nama));
+    const sampaiAdmin = rekap.filter((r) => r.status === "ARRIVED ADMIN").length;
+    const belumLunas = tagihan.filter((g) => !g.lunas).length;
+    const lunasCount = tagihan.filter((g) => g.lunas).length;
+    const persenLunas = tagihan.length ? Math.round((lunasCount / tagihan.length) * 100) : 0;
+    return {
+      totalBatch: batchSet.size,
+      totalPembeli: buyerSet.size,
+      sampaiAdmin,
+      belumLunas,
+      persenLunas,
+    };
+  }, [rekap, tagihan]);
+
+  const selectTab = (t) => { setTab(t); setSidebarOpen(false); };
+  const selectAsal = (a) => { setTab("rekap"); setAsalTab(a); setRekapBatchFilter("Semua"); setSidebarOpen(false); };
 
   const filteredRekap = useMemo(() => {
     return rekap.filter((r) => {
@@ -446,10 +470,11 @@ function GoTracker() {
       return { ...g, statusLabel, people: Array.from(byNama.entries()).map(([nama, items]) => ({ nama, items })) };
     });
     groups.sort((a, b) => {
-      if (a.asal !== b.asal) return a.asal.localeCompare(b.asal);
       const na = parseInt(a.batch, 10), nb = parseInt(b.batch, 10);
       if (!isNaN(na) && !isNaN(nb) && na !== nb) return nb - na;
-      return String(a.batch).localeCompare(String(b.batch));
+      const batchCompare = String(a.batch).localeCompare(String(b.batch));
+      if (batchCompare !== 0) return batchCompare;
+      return a.asal.localeCompare(b.asal);
     });
     return groups;
   }, [filteredRekap]);
@@ -475,157 +500,195 @@ function GoTracker() {
 
   return (
     <div className="app">
-      <div className="airmail-stripe"></div>
-      <div className="header">
-        <div className="brand">
-          <div className="brand-mark"><PlaneIcon size={18} /></div>
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-brand">
+          <div className="brand-mark"><PlaneIcon size={17} /></div>
           <div>
-            <h1>DOORSMATE GROUP ORDER</h1>
-            <p>Rekap Barang dan Tagihan Terbaru</p>
+            <h1>DOORSMATE</h1>
+            <p>Group Order Tracker</p>
           </div>
         </div>
-      </div>
-      <div className={`sync-note ${syncStatus}`}>
-        {syncStatus === "loading" && "Memuat data terbaru dari Google Sheets…"}
-        {syncStatus === "live" && lastSynced && `Data live dari Google Sheets · diperbarui ${lastSynced.toLocaleTimeString("id-ID")}`}
-        {syncStatus === "error" && syncError}
-        <button className="sync-refresh" onClick={syncFromSheets}>⟳ Refresh</button>
-      </div>
+        <nav className="sidebar-nav">
+          <button className={`nav-item ${tab === "rekap" ? "active" : ""}`} onClick={() => selectTab("rekap")}>
+            <BoxIcon size={16} /> Rekap Barang
+          </button>
+          {tab === "rekap" && (
+            <div className="nav-sub">
+              <button className={asalTab === "Semua" ? "active" : ""} onClick={() => selectAsal("Semua")}>Semua Asal</button>
+              {availableAsal.map((a) => (
+                <button key={a} className={asalTab === a ? "active" : ""} onClick={() => selectAsal(a)}>
+                  <span className="asal-dot" style={{ background: ORIGIN_COLOR[a] }}></span>{a}
+                </button>
+              ))}
+            </div>
+          )}
+          <button className={`nav-item ${tab === "tagihan" ? "active" : ""}`} onClick={() => selectTab("tagihan")}>
+            <ReceiptIcon size={16} /> Tagihan
+          </button>
+        </nav>
+      </aside>
 
-      <div className="content">
-        <div className="subtabs">
-          <button className={tab === "rekap" ? "active" : ""} onClick={() => setTab("rekap")}>Rekap Barang</button>
-          <button className={tab === "tagihan" ? "active" : ""} onClick={() => setTab("tagihan")}>Tagihan</button>
+      <div className="main">
+        <div className="topbar">
+          <button className="hamburger" onClick={() => setSidebarOpen(true)}><MenuIcon size={20} /></button>
+          <h2>{tab === "rekap" ? "Rekap Barang" : "Tagihan"}</h2>
+          <div className={`sync-pill ${syncStatus}`}>
+            {syncStatus === "loading" && "Memuat…"}
+            {syncStatus === "live" && "Live"}
+            {syncStatus === "error" && "Gagal sinkron"}
+            <button className="sync-refresh" onClick={syncFromSheets} title="Refresh data"><RefreshIcon size={13} /></button>
+          </div>
         </div>
 
-        {tab === "rekap" ? (
-          <>
-            {availableAsal.length > 1 && (
-              <div className="asal-tabs">
-                <button className={asalTab === "Semua" ? "active" : ""} onClick={() => { setAsalTab("Semua"); setRekapBatchFilter("Semua"); }}>Semua</button>
-                {availableAsal.map((a) => (
-                  <button
-                    key={a}
-                    className={asalTab === a ? "active" : ""}
-                    style={asalTab === a ? { background: ORIGIN_COLOR[a], borderColor: ORIGIN_COLOR[a] } : { color: ORIGIN_COLOR[a], borderColor: ORIGIN_COLOR[a] }}
-                    onClick={() => { setAsalTab(a); setRekapBatchFilter("Semua"); }}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="toolbar">
-              <div className="search-box">
-                <SearchIcon size={14} />
-                <input placeholder="Cari nama pembeli…" value={rekapQuery} onChange={(e) => setRekapQuery(e.target.value)} />
-              </div>
-              <select value={rekapBatchFilter} onChange={(e) => setRekapBatchFilter(e.target.value)}>
-                <option value="Semua">Semua batch</option>
-                {rekapBatchOptions.map((b) => <option key={b.key} value={b.key}>Batch {b.batch}{asalTab === "Semua" ? ` · ${b.asal}` : ""}</option>)}
-              </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="Semua">Semua status</option>
-                {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+        <div className="content">
+          <div className="hero">
+            <div className="hero-circle c1"></div>
+            <div className="hero-circle c2"></div>
+            <div className="hero-text">
+              <h3>Pantau pesanan grup order kamu<br />di satu tempat</h3>
+              <p>Data rekap barang dan tagihan diperbarui otomatis dari Google Sheets.</p>
+              {syncStatus === "live" && lastSynced && (
+                <span className="hero-sync">Diperbarui {lastSynced.toLocaleTimeString("id-ID")}</span>
+              )}
+              {syncStatus === "error" && <span className="hero-sync error">{syncError}</span>}
             </div>
+          </div>
 
-            {groupedRekap.length === 0 ? (
-              <div className="empty">Tidak ada orderan yang cocok.</div>
-            ) : (
-              groupedRekap.map((g) => (
-                <div className="batch-block" key={g.key}>
-                  <div className="batch-header">
-                    <span className="batch-code">
-                      BATCH<span className="batch-num">{g.batch}</span>
-                      <span className="origin-badge" style={{ background: ORIGIN_COLOR[g.asal] || "#6B7686" }}>{g.asal}</span>
-                    </span>
-                    <span className="status-stamp" style={{ borderColor: STATUS_COLOR[g.statusLabel], color: STATUS_COLOR[g.statusLabel] }}>{g.statusLabel}</span>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <span className="stat-num">{stats.totalBatch}</span>
+              <span className="stat-label">Total Batch</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-num">{stats.totalPembeli}</span>
+              <span className="stat-label">Total Pembeli</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-num" style={{ color: "var(--green)" }}>{stats.sampaiAdmin}</span>
+              <span className="stat-label">Sampai di Admin</span>
+            </div>
+            <div className="stat-card stat-donut-card">
+              <div className="stat-donut" style={{ background: `conic-gradient(var(--primary) ${stats.persenLunas * 3.6}deg, var(--line) 0deg)` }}>
+                <div className="stat-donut-inner">{stats.persenLunas}%</div>
+              </div>
+              <span className="stat-label">Tagihan Lunas</span>
+            </div>
+          </div>
+
+          <div className="panel">
+            {tab === "rekap" ? (
+              <>
+                <div className="toolbar">
+                  <div className="search-box">
+                    <SearchIcon size={14} />
+                    <input placeholder="Cari nama pembeli…" value={rekapQuery} onChange={(e) => setRekapQuery(e.target.value)} />
                   </div>
-                  <div className="batch-perforation"></div>
+                  <select value={rekapBatchFilter} onChange={(e) => setRekapBatchFilter(e.target.value)}>
+                    <option value="Semua">Semua batch</option>
+                    {rekapBatchOptions.map((b) => <option key={b.key} value={b.key}>Batch {b.batch}{asalTab === "Semua" ? ` · ${b.asal}` : ""}</option>)}
+                  </select>
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="Semua">Semua status</option>
+                    {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                {groupedRekap.length === 0 ? (
+                  <div className="empty">Tidak ada orderan yang cocok.</div>
+                ) : (
+                  groupedRekap.map((g) => (
+                    <div className="batch-block" key={g.key}>
+                      <div className="batch-header">
+                        <span className="batch-code">
+                          Batch <span className="batch-num">{g.batch}</span>
+                          <span className="origin-badge" style={{ background: ORIGIN_COLOR[g.asal] || "#6B7686" }}>{g.asal}</span>
+                        </span>
+                        <span className="status-stamp" style={{ background: STATUS_COLOR[g.statusLabel] }}>STATUS: {g.statusLabel}</span>
+                      </div>
+                      <div className="table-wrap">
+                        <table className="rekap-table">
+                          <thead>
+                            <tr>
+                              <th>Nama</th>
+                              <th>Barang yang Diorder</th>
+                              <th>Jumlah</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.people.map((p) =>
+                              p.items.map((it, idx) => (
+                                <tr key={it.id}>
+                                  {idx === 0 && <td className="td-nama" rowSpan={p.items.length}>{p.nama}</td>}
+                                  <td>{it.item}</td>
+                                  <td className="td-center">{formatJumlah(it.jumlah)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="batch-footer">
+                        Total {g.items.length} barang · {g.people.length} pembeli
+                      </div>
+                    </div>
+                  ))
+                )}
+              </>
+            ) : (
+              <>
+                <div className="toolbar">
+                  <div className="search-box">
+                    <SearchIcon size={14} />
+                    <input placeholder="Cari nama pembeli…" value={tagihanQuery} onChange={(e) => setTagihanQuery(e.target.value)} />
+                  </div>
+                  <select value={tagihanBatchFilter} onChange={(e) => setTagihanBatchFilter(e.target.value)}>
+                    <option value="Semua">Semua batch</option>
+                    {tagihanBatchOptions.map((b) => <option key={b} value={b}>Batch {b}</option>)}
+                  </select>
+                </div>
+
+                {filteredTagihan.length === 0 ? (
+                  <div className="empty">Tidak ada tagihan yang cocok.</div>
+                ) : (
                   <div className="table-wrap">
-                    <table className="rekap-table">
+                    <table className="tagihan-table">
                       <thead>
                         <tr>
-                          <th>Nama</th>
-                          <th>Barang yang Diorder</th>
-                          <th>Jumlah</th>
+                          <th>DN Line/Username</th>
+                          <th>Batch</th>
+                          <th>Barang Diorder</th>
+                          <th>Tagihan</th>
+                          <th>Total Tagihan</th>
+                          <th>Status Pelunasan</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {g.people.map((p) =>
-                          p.items.map((it, idx) => (
-                            <tr key={it.id}>
-                              {idx === 0 && <td className="td-nama" rowSpan={p.items.length}>{p.nama}</td>}
-                              <td>{it.item}</td>
-                              <td className="td-center">{formatJumlah(it.jumlah)}</td>
+                        {filteredTagihan.map((g, gIdx) =>
+                          g.items.map((item, idx) => (
+                            <tr key={item.id} className={gIdx % 2 === 1 ? "row-alt" : ""}>
+                              {idx === 0 && <td className="td-nama" rowSpan={g.items.length}>{g.nama}</td>}
+                              <td className="td-center">{item.batch}</td>
+                              <td>{item.item}</td>
+                              <td className="td-right">{currency(item.tagihan)}</td>
+                              {idx === 0 && <td className="td-right td-total" rowSpan={g.items.length}>{currency(g.total)}</td>}
+                              {idx === 0 && (
+                                <td className="td-center" rowSpan={g.items.length}>
+                                  <span className={`pelunasan-label ${g.lunas ? "lunas" : "belum"}`}>{g.lunas ? "Lunas" : "Belum Lunas"}</span>
+                                </td>
+                              )}
                             </tr>
                           ))
                         )}
                       </tbody>
                     </table>
                   </div>
-                  <div className="batch-footer">
-                    Total {g.items.length} barang · {g.people.length} pembeli
-                  </div>
-                </div>
-              ))
+                )}
+              </>
             )}
-          </>
-        ) : (
-          <>
-            <div className="toolbar">
-              <div className="search-box">
-                <SearchIcon size={14} />
-                <input placeholder="Cari nama pembeli…" value={tagihanQuery} onChange={(e) => setTagihanQuery(e.target.value)} />
-              </div>
-              <select value={tagihanBatchFilter} onChange={(e) => setTagihanBatchFilter(e.target.value)}>
-                <option value="Semua">Semua batch</option>
-                {tagihanBatchOptions.map((b) => <option key={b} value={b}>Batch {b}</option>)}
-              </select>
-            </div>
-
-            {filteredTagihan.length === 0 ? (
-              <div className="empty">Tidak ada tagihan yang cocok.</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="tagihan-table">
-                  <thead>
-                    <tr>
-                      <th>DN Line/Username</th>
-                      <th>Batch</th>
-                      <th>Barang Diorder</th>
-                      <th>Tagihan</th>
-                      <th>Total Tagihan</th>
-                      <th>Check Pelunasan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTagihan.map((g) =>
-                      g.items.map((item, idx) => (
-                        <tr key={item.id}>
-                          {idx === 0 && <td className="td-nama" rowSpan={g.items.length}>{g.nama}</td>}
-                          <td className="td-center">{item.batch}</td>
-                          <td>{item.item}</td>
-                          <td className="td-right">{currency(item.tagihan)}</td>
-                          {idx === 0 && <td className="td-right td-total" rowSpan={g.items.length}>{currency(g.total)}</td>}
-                          {idx === 0 && (
-                            <td className="td-center" rowSpan={g.items.length}>
-                              <label className="pelunasan-cell">
-                                <input type="checkbox" checked={g.lunas} disabled className="pelunasan-check" />
-                                <span className={`pelunasan-label ${g.lunas ? "lunas" : "belum"}`}>{g.lunas ? "Lunas" : "Belum Lunas"}</span>
-                              </label>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -745,9 +808,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(<GoTracker />);
   }
   .batch-num { font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: 0; }
   .status-stamp {
-    font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 10.5px; letter-spacing: 0.06em;
-    border: 2px solid; border-radius: 6px; padding: 3px 9px; background: transparent;
-    transform: rotate(-3deg); white-space: nowrap;
+    font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 10.5px; letter-spacing: 0.04em;
+    border-radius: 6px; padding: 4px 10px; color: #fff; white-space: nowrap;
   }
   .batch-perforation {
     height: 0; border-top: 2px dashed var(--line); margin: 0 18px;
@@ -777,8 +839,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<GoTracker />);
   .tagihan-table tr:last-child td { border-bottom: none; }
   .td-right { text-align: right; }
   .td-total { font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
-  .pelunasan-check { width: 16px; height: 16px; accent-color: var(--green); }
-  .pelunasan-cell { display: inline-flex; align-items: center; gap: 6px; }
+  .tagihan-table tr.row-alt td { background: #F5F7F9; }
   .pelunasan-label { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px; color: #fff; white-space: nowrap; }
   .pelunasan-label.lunas { background: var(--green); }
   .pelunasan-label.belum { background: var(--red); }
