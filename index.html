@@ -43,7 +43,7 @@ const Icon = ({ path, size = 16 }) => (
   </svg>
 );
 const SearchIcon = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>} />;
-const BoxIcon = (p) => <Icon {...p} path={<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>} />;
+const PlaneIcon = (p) => <Icon {...p} path={<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></>} />;
 
 /* ---------- data ---------- */
 const ALL_STATUSES = ["DONE CO", "OTW WH", "WH KR", "WH JP", "WH CH", "OTW INA", "WH INA", "ARRIVED ADMIN", "CANCEL", "REFUND"];
@@ -330,6 +330,16 @@ function currency(n) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
 }
 
+function formatJumlah(val) {
+  if (val === null || val === undefined || val === "") return "1 pcs";
+  const s = String(val).trim();
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = parseFloat(s);
+    return `${Number.isInteger(n) ? n : s} pcs`;
+  }
+  return s;
+}
+
 function GoTracker() {
   const [rekap, setRekap] = useState(SEED_REKAP);
   const [tagihan, setTagihan] = useState(() => groupTagihanRows(SEED_TAGIHAN_RAW));
@@ -377,8 +387,14 @@ function GoTracker() {
 
   const [rekapQuery, setRekapQuery] = useState("");
   const [rekapBatchFilter, setRekapBatchFilter] = useState("Semua");
-  const [asalFilter, setAsalFilter] = useState("Semua");
+  const [asalTab, setAsalTab] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("Semua");
+
+  const availableAsal = useMemo(() => {
+    const order = ["KR", "JP", "CN", "INA"];
+    const present = new Set(rekap.map((r) => r.asal));
+    return order.filter((a) => present.has(a));
+  }, [rekap]);
 
   const [tagihanQuery, setTagihanQuery] = useState("");
   const [tagihanBatchFilter, setTagihanBatchFilter] = useState("Semua");
@@ -387,18 +403,20 @@ function GoTracker() {
     return rekap.filter((r) => {
       if (rekapQuery && !r.nama.toLowerCase().includes(rekapQuery.toLowerCase())) return false;
       if (rekapBatchFilter !== "Semua" && `${r.asal}||${r.batch}` !== rekapBatchFilter) return false;
-      if (asalFilter !== "Semua" && r.asal !== asalFilter) return false;
+      if (asalTab !== "Semua" && r.asal !== asalTab) return false;
       if (statusFilter !== "Semua" && r.status !== statusFilter) return false;
       return true;
     });
-  }, [rekap, rekapQuery, rekapBatchFilter, asalFilter, statusFilter]);
+  }, [rekap, rekapQuery, rekapBatchFilter, asalTab, statusFilter]);
 
   const rekapBatchOptions = useMemo(() => {
     const seen = new Map();
-    rekap.forEach((r) => {
-      const key = `${r.asal}||${r.batch}`;
-      if (!seen.has(key)) seen.set(key, { key, asal: r.asal, batch: r.batch });
-    });
+    rekap
+      .filter((r) => asalTab === "Semua" || r.asal === asalTab)
+      .forEach((r) => {
+        const key = `${r.asal}||${r.batch}`;
+        if (!seen.has(key)) seen.set(key, { key, asal: r.asal, batch: r.batch });
+      });
     const list = Array.from(seen.values()).sort((a, b) => {
       if (a.asal !== b.asal) return a.asal.localeCompare(b.asal);
       const na = parseInt(a.batch, 10), nb = parseInt(b.batch, 10);
@@ -406,7 +424,7 @@ function GoTracker() {
       return String(a.batch).localeCompare(String(b.batch));
     });
     return list;
-  }, [rekap]);
+  }, [rekap, asalTab]);
 
   const groupedRekap = useMemo(() => {
     const byKey = new Map();
@@ -457,12 +475,13 @@ function GoTracker() {
 
   return (
     <div className="app">
+      <div className="airmail-stripe"></div>
       <div className="header">
         <div className="brand">
-          <div className="brand-mark"><BoxIcon size={17} /></div>
+          <div className="brand-mark"><PlaneIcon size={18} /></div>
           <div>
-            <h1>GO Tracker</h1>
-            <p>Rekap barang &amp; tagihan group order</p>
+            <h1>DOORSMATE GROUP ORDER</h1>
+            <p>Rekap Barang dan Tagihan Terbaru</p>
           </div>
         </div>
       </div>
@@ -481,6 +500,21 @@ function GoTracker() {
 
         {tab === "rekap" ? (
           <>
+            {availableAsal.length > 1 && (
+              <div className="asal-tabs">
+                <button className={asalTab === "Semua" ? "active" : ""} onClick={() => { setAsalTab("Semua"); setRekapBatchFilter("Semua"); }}>Semua</button>
+                {availableAsal.map((a) => (
+                  <button
+                    key={a}
+                    className={asalTab === a ? "active" : ""}
+                    style={asalTab === a ? { background: ORIGIN_COLOR[a], borderColor: ORIGIN_COLOR[a] } : { color: ORIGIN_COLOR[a], borderColor: ORIGIN_COLOR[a] }}
+                    onClick={() => { setAsalTab(a); setRekapBatchFilter("Semua"); }}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="toolbar">
               <div className="search-box">
                 <SearchIcon size={14} />
@@ -488,10 +522,7 @@ function GoTracker() {
               </div>
               <select value={rekapBatchFilter} onChange={(e) => setRekapBatchFilter(e.target.value)}>
                 <option value="Semua">Semua batch</option>
-                {rekapBatchOptions.map((b) => <option key={b.key} value={b.key}>Batch {b.batch} · {b.asal}</option>)}
-              </select>
-              <select value={asalFilter} onChange={(e) => setAsalFilter(e.target.value)}>
-                {["Semua", "KR", "JP", "CN", "INA"].map((a) => <option key={a} value={a}>{a === "Semua" ? "Semua asal" : a}</option>)}
+                {rekapBatchOptions.map((b) => <option key={b.key} value={b.key}>Batch {b.batch}{asalTab === "Semua" ? ` · ${b.asal}` : ""}</option>)}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="Semua">Semua status</option>
@@ -505,15 +536,13 @@ function GoTracker() {
               groupedRekap.map((g) => (
                 <div className="batch-block" key={g.key}>
                   <div className="batch-header">
-                    <span>
-                      BATCH {g.batch}{" "}
+                    <span className="batch-code">
+                      BATCH<span className="batch-num">{g.batch}</span>
                       <span className="origin-badge" style={{ background: ORIGIN_COLOR[g.asal] || "#6B7686" }}>{g.asal}</span>
                     </span>
-                    <span className="batch-status-side">
-                      <span className="status-pill" style={{ background: STATUS_COLOR[g.statusLabel] }}>{g.statusLabel}</span>
-                      <span className="batch-count">{g.people.length} pembeli</span>
-                    </span>
+                    <span className="status-stamp" style={{ borderColor: STATUS_COLOR[g.statusLabel], color: STATUS_COLOR[g.statusLabel] }}>{g.statusLabel}</span>
                   </div>
+                  <div className="batch-perforation"></div>
                   <div className="table-wrap">
                     <table className="rekap-table">
                       <thead>
@@ -529,12 +558,15 @@ function GoTracker() {
                             <tr key={it.id}>
                               {idx === 0 && <td className="td-nama" rowSpan={p.items.length}>{p.nama}</td>}
                               <td>{it.item}</td>
-                              <td className="td-center">{it.jumlah}</td>
+                              <td className="td-center">{formatJumlah(it.jumlah)}</td>
                             </tr>
                           ))
                         )}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="batch-footer">
+                    Total {g.items.length} barang · {g.people.length} pembeli
                   </div>
                 </div>
               ))
@@ -603,106 +635,156 @@ ReactDOM.createRoot(document.getElementById("root")).render(<GoTracker />);
 </script>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
   .app {
-    --ink: #1C2B4A;
-    --paper: #EEF1EF;
+    --ink: #17233F;
+    --red: #D6483C;
+    --blue: #35618F;
+    --paper: #F1F3F1;
     --card: #FFFFFF;
-    --line: #D8DEDA;
-    --muted: #6B7686;
+    --line: #DFE3E1;
+    --muted: #6B7280;
     --gold: #C98A2B;
-    --coral: #D1503B;
     --green: #3F8F5F;
+    --purple: #7A4FA0;
     font-family: 'Inter', sans-serif;
     background: var(--paper);
     color: var(--ink);
     min-height: 100vh;
   }
   .app * { box-sizing: border-box; }
+  .app *:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  .airmail-stripe {
+    height: 6px;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--red) 0px, var(--red) 10px,
+      #fff 10px, #fff 14px,
+      var(--blue) 14px, var(--blue) 24px,
+      #fff 24px, #fff 28px
+    );
+  }
 
   .header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 22px; border-bottom: 2px solid var(--ink);
-    background: var(--card);
+    padding: 20px 24px; background: var(--card); border-bottom: 1px solid var(--line);
   }
-  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
   .brand-mark {
-    width: 34px; height: 34px; border: 2px solid var(--ink); border-radius: 8px;
-    display: flex; align-items: center; justify-content: center; background: var(--ink); color: #fff;
+    width: 40px; height: 40px; border-radius: 50%; border: 2px dashed var(--ink);
+    display: flex; align-items: center; justify-content: center; color: var(--ink);
+    transform: rotate(-8deg); flex-shrink: 0;
   }
-  .brand h1 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; margin: 0; letter-spacing: -0.01em; }
-  .brand p { margin: 0; font-size: 11.5px; color: var(--muted); }
+  .brand h1 {
+    font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 21px; margin: 0;
+    letter-spacing: 0.03em; line-height: 1.15;
+  }
+  .brand p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
 
   .sync-note {
-    font-size: 11.5px; color: var(--muted); text-align: center; padding: 7px 10px;
-    background: #E4E8E4; border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+    font-size: 11.5px; color: var(--muted); text-align: left; padding: 8px 24px;
+    background: var(--card); border-bottom: 1px solid var(--line); border-left: 3px solid var(--line);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  .sync-note.error { background: #FBE5E1; color: #8A2E20; }
-  .sync-note.live { background: #E1EDE5; color: #24593A; }
+  .sync-note.error { border-left-color: var(--red); color: #8A2E20; }
+  .sync-note.live { border-left-color: var(--green); color: #24593A; }
   .sync-refresh {
     font-size: 11px; font-weight: 700; border: 1px solid currentColor; background: transparent; color: inherit;
     border-radius: 20px; padding: 2px 10px; cursor: pointer; font-family: inherit;
   }
+  .sync-refresh:hover { background: currentColor; color: var(--card); }
 
-  .content { max-width: 880px; margin: 0 auto; padding: 22px 18px 60px; }
+  .content { max-width: 920px; margin: 0 auto; padding: 26px 20px 60px; }
 
-  .subtabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .subtabs { display: flex; gap: 22px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
   .subtabs button {
-    padding: 7px 16px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card);
-    font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer;
+    padding: 9px 2px 12px; border: none; border-bottom: 2px solid transparent; background: transparent;
+    font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14.5px; letter-spacing: 0.02em;
+    color: var(--muted); cursor: pointer;
   }
-  .subtabs button.active { border-color: var(--ink); color: var(--ink); background: #fff; box-shadow: 2px 2px 0 var(--ink); }
+  .subtabs button.active { border-bottom-color: var(--blue); color: var(--ink); }
+  .subtabs button:hover { color: var(--ink); }
 
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
   .search-box {
-    flex: 1; min-width: 180px; display: flex; align-items: center; gap: 7px;
-    border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--card); color: var(--muted);
+    flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; background: var(--card); color: var(--muted);
+    transition: border-color .15s;
   }
+  .search-box:focus-within { border-color: var(--blue); }
   .search-box input { border: none; outline: none; font-size: 13.5px; width: 100%; font-family: inherit; background: transparent; color: var(--ink); }
   select {
-    border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px;
-    background: var(--card); color: var(--ink); font-family: inherit;
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13px;
+    background: var(--card); color: var(--ink); font-family: inherit; cursor: pointer;
   }
+  select:focus { border-color: var(--blue); }
 
-  .batch-block { margin-bottom: 22px; border: 1.5px solid var(--ink); border-radius: 10px; overflow: hidden; background: var(--card); }
-  .batch-header {
-    background: var(--ink); color: #fff; font-family: 'Space Grotesk', sans-serif; font-weight: 700;
-    font-size: 13.5px; letter-spacing: 0.02em; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
+  .asal-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .asal-tabs button {
+    padding: 6px 16px; border-radius: 7px; border: 1.5px solid var(--line); background: var(--card);
+    font-family: 'Oswald', sans-serif; font-size: 12.5px; font-weight: 600; letter-spacing: 0.03em;
+    color: var(--muted); cursor: pointer; transition: transform .1s;
   }
-  .batch-count { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 11.5px; opacity: 0.75; }
-  .batch-status-side { display: flex; align-items: center; gap: 10px; }
+  .asal-tabs button.active { color: #fff; }
+  .asal-tabs button:not(.active) { color: var(--muted); }
+  .asal-tabs button:hover { transform: translateY(-1px); }
+
+  .batch-block {
+    margin-bottom: 20px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card);
+    box-shadow: 0 1px 2px rgba(23,35,63,0.04), 0 10px 24px -18px rgba(23,35,63,0.35);
+  }
+  .batch-header {
+    background: var(--card); color: var(--ink); padding: 13px 18px 12px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+  }
+  .batch-code {
+    font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em;
+    color: var(--muted); display: inline-flex; align-items: center; gap: 8px;
+  }
+  .batch-num { font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: 0; }
+  .status-stamp {
+    font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 10.5px; letter-spacing: 0.06em;
+    border: 2px solid; border-radius: 6px; padding: 3px 9px; background: transparent;
+    transform: rotate(-3deg); white-space: nowrap;
+  }
+  .batch-perforation {
+    height: 0; border-top: 2px dashed var(--line); margin: 0 18px;
+  }
+  .batch-footer {
+    padding: 9px 18px; font-size: 11.5px; color: var(--muted); background: #FAFAF8; border-top: 1px solid var(--line);
+  }
   .table-wrap { overflow-x: auto; }
   .rekap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .rekap-table th {
-    text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; color: var(--muted);
-    padding: 9px 14px; border-bottom: 1.5px solid var(--line); background: #F7F8F6; white-space: nowrap;
+    text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted);
+    padding: 9px 18px; border-bottom: 1px solid var(--line); background: #FAFAF8; white-space: nowrap;
   }
-  .rekap-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .rekap-table td { padding: 10px 18px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .rekap-table tr:last-child td { border-bottom: none; }
   .td-nama { font-weight: 600; white-space: nowrap; }
   .td-center { text-align: center; }
-  .status-pill { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
-  .origin-badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 20px; color: #fff; white-space: nowrap; }
+  .origin-badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; color: #fff; white-space: nowrap; }
 
-  .tagihan-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1.5px solid var(--ink); border-radius: 10px; overflow: hidden; }
+  .tagihan-table { width: 100%; border-collapse: collapse; font-size: 13px; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(23,35,63,0.04), 0 10px 24px -18px rgba(23,35,63,0.35); }
   .tagihan-table th {
-    text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; color: #fff;
-    padding: 10px 14px; background: var(--ink); white-space: nowrap;
+    text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
+    padding: 11px 16px; background: var(--ink); white-space: nowrap; font-family: 'Oswald', sans-serif;
   }
-  .tagihan-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); vertical-align: middle; }
-  .tagihan-table td:last-child, .tagihan-table th:last-child { border-right: none; }
+  .tagihan-table td { padding: 10px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; background: var(--card); }
   .tagihan-table tr:last-child td { border-bottom: none; }
   .td-right { text-align: right; }
-  .td-total { font-weight: 700; background: #F7F8F6; }
+  .td-total { font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
   .pelunasan-check { width: 16px; height: 16px; accent-color: var(--green); }
   .pelunasan-cell { display: inline-flex; align-items: center; gap: 6px; }
-  .pelunasan-label { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; color: #fff; white-space: nowrap; }
+  .pelunasan-label { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px; color: #fff; white-space: nowrap; }
   .pelunasan-label.lunas { background: var(--green); }
-  .pelunasan-label.belum { background: var(--coral); }
+  .pelunasan-label.belum { background: var(--red); }
 
   .empty { text-align: center; padding: 40px 10px; color: var(--muted); font-size: 13.5px; }
+</style>
 
 </body>
 </html>
